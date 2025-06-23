@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FinverseLedger - Filterable</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 30px;
+            max-width: 700px;
+            margin: auto;
+        }
+        h2 { color: #2c3e50; }
+        form, .filters { margin-bottom: 20px; }
+        input, button {
+            padding: 8px;
+            width: 100%;
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+        .transaction {
+            background: #f4f4f4;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .filter-box {
+            display: flex;
+            gap: 10px;
+        }
+        .filter-box input {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>💸 Submit New Transaction</h2>
+    <form id="txForm">
+        <input type="number" id="id" placeholder="Transaction ID" required>
+        <input type="text" id="purpose" placeholder="Purpose" required>
+        <input type="number" id="amount" placeholder="Amount (₹)" required>
+        <button type="submit">Submit Transaction</button>
+    </form>
+
+    <p id="response"></p>
+
+    <hr>
+
+    <h2>📜 Transaction History</h2>
+
+    <div class="filters">
+        <div class="filter-box">
+            <input type="text" id="filterPurpose" placeholder="🔍 Filter by Purpose">
+            <input type="number" id="minAmount" placeholder="₹ Min Amount">
+        </div>
+        <button onclick="loadTransactions()">🔄 Refresh</button>
+    </div>
+
+    <div id="history"></div>
+
+    <script>
+        const form = document.getElementById('txForm');
+        const responsePara = document.getElementById('response');
+        const historyDiv = document.getElementById('history');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const payload = {
+                id: parseInt(document.getElementById('id').value),
+                purpose: document.getElementById('purpose').value,
+                amount: parseInt(document.getElementById('amount').value)
+            };
+
+            try {
+                const res = await fetch("http://localhost:8000/add_transaction", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await res.json();
+
+                if (res.ok) {
+                    responsePara.innerHTML = `✅ Transaction submitted. <br>Hash: <code>${result.txHash}</code>`;
+                    form.reset();
+                    loadTransactions(); // refresh
+                } else {
+                    responsePara.innerText = `❌ Error: ${result.detail}`;
+                }
+            } catch {
+                responsePara.innerText = "🚫 Cannot connect to backend.";
+            }
+        });
+
+        async function loadTransactions() {
+            historyDiv.innerHTML = "Loading...";
+            try {
+                const res = await fetch("http://localhost:8000/transactions");
+                const result = await res.json();
+                let transactions = result.transactions || [];
+
+                // Filtering logic
+                const keyword = document.getElementById('filterPurpose').value.toLowerCase();
+                const minAmount = parseInt(document.getElementById('minAmount').value) || 0;
+
+                transactions = transactions.filter(tx => {
+                    const matchPurpose = keyword ? tx.purpose.toLowerCase().includes(keyword) : true;
+                    const matchAmount = tx.amount >= minAmount;
+                    return matchPurpose && matchAmount;
+                });
+
+                if (transactions.length === 0) {
+                    historyDiv.innerHTML = "<i>No matching transactions found.</i>";
+                    return;
+                }
+
+                historyDiv.innerHTML = "";
+                transactions.reverse().forEach(tx => {
+                    const date = new Date(tx.timestamp * 1000).toLocaleString();
+                    const entry = document.createElement("div");
+                    entry.className = "transaction";
+                    entry.innerHTML = `🆔 <b>${tx.id}</b> | 💬 ${tx.purpose} | 💰 ₹${tx.amount} <br> 🕒 ${date}`;
+                    historyDiv.appendChild(entry);
+                });
+
+            } catch {
+                historyDiv.innerText = "❌ Failed to load transactions.";
+            }
+        }
+
+        // Initial load
+        window.onload = loadTransactions;
+    </script>
+
+</body>
+</html>
